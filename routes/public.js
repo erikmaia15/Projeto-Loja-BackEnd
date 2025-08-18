@@ -46,7 +46,7 @@ router.post("/login", async (req, res) => {
         isAdmin: user.isAdmin,
       },
       JWT_SECRET,
-      { expiresIn: "1m" }
+      { expiresIn: "3d" }
     );
 
     res.status(200).json(token);
@@ -80,7 +80,81 @@ router.get("/usuarios", async (req, res) => {
     });
   } catch (error) {
     console.log(error);
-    res.status(404).json({ message: "usuário não encontrado " });
+    res.status(404).json({ message: "Usuário não encontrado, faça login " });
+  }
+});
+router.post("/usuario-carrinho", async (req, res) => {
+  const usuarioID = await tokenDecodificar.decodedToken(
+    req.headers.authorization
+  );
+  const informacoes = req.body;
+  const user = await prisma.user.findUnique({
+    where: { id: usuarioID.id },
+  });
+  try {
+    if (!user.carrinho.includes(informacoes.produtoId)) {
+      // Só adiciona se não existir
+      const response = await prisma.user.update({
+        where: { id: usuarioID.id },
+        data: {
+          carrinho: {
+            push: informacoes.produtoId,
+          },
+        },
+      });
+      res.status(201).json({
+        message: "Produto adicionado com sucesso!",
+        carrinhoIDs: response.carrinho,
+      });
+    } else {
+      res.status(404).json({ message: "Produto já está no carrinho!" });
+    }
+  } catch (error) {
+    res.status(500).json({ message: "Erro ao adicionar, tente novamente!" });
+  }
+});
+router.get("/usuario-carrinho", async (req, res) => {
+  const usuarioID = await tokenDecodificar.decodedToken(
+    req.headers.authorization
+  );
+  try {
+    const response = await prisma.user.findUnique({
+      where: { id: usuarioID.id },
+    });
+    res.status(200).json({
+      message: "Carrinho listado com sucesso!",
+      carrinhoIds: response.carrinho,
+    });
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Erro no servidor, tente novamente!", erro: { error } });
+  }
+});
+router.put("/usuario-carrinho", async (req, res) => {
+  const tokenUser = await tokenDecodificar.decodedToken(
+    req.headers.authorization
+  );
+  const produtoId = req.body.produtoId;
+  const user = await prisma.user.findUnique({ where: { id: tokenUser.id } });
+  user.carrinho.pop(produtoId);
+  try {
+    const response = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        nome: user.nome,
+        email: user.email,
+        senha: user.senha,
+        carrinho: user.carrinho,
+      },
+    });
+    res.status(200).json({
+      message: "Produto removido com sucesso!",
+      produtoId: response.carrinho,
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Erro no servidor, tenta novamente!" });
+    console.log(error);
   }
 });
 

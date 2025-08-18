@@ -3,6 +3,7 @@ import prisma from "../utils/prisma.js";
 import upload from "../src/config/upload.js";
 import cloudinary from "../src/config/cloudinary.js";
 import fs from "fs";
+import tokenDecodificar from "../utils/tokenDecodificar.js";
 const router = express.Router();
 
 router.get("/listar-usuarios", async (req, res) => {
@@ -31,21 +32,29 @@ router.put("/atualizar-usuarios", async (req, res) => {
   }
 });
 router.put("/atualizar-usuario-admin", async (req, res) => {
-  try {
-    const { email, isAdmin } = req.body;
-    const response = await prisma.user.update({
-      where: { email: email },
-      data: {
-        isAdmin: isAdmin,
-      },
-    });
-    console.log(response);
-    return res.status(201).json({ message: "usuário atualizado" });
-  } catch (error) {
-    console.log(error);
-    res.status(500).json({
-      message: "erro no servidor, tente novamente",
-    });
+  const token = req.headers.authorization;
+  const isAdmin = await tokenDecodificar.decodedToken(token);
+  console.log(isAdmin);
+  const id = req.body.id;
+  if (isAdmin.isAdmin === true) {
+    try {
+      const response = await prisma.user.update({
+        where: { id: id },
+        data: {
+          isAdmin: isAdmin.isAdmin,
+        },
+      });
+      return res
+        .status(201)
+        .json({ message: "usuário atualizado", usuario: response });
+    } catch (error) {
+      console.log(error);
+      res.status(500).json({
+        message: "erro no servidor, tente novamente",
+      });
+    }
+  } else {
+    res.status(404).json({ message: "Usuário não é administrador!" });
   }
 });
 router.post("/produtos", upload.single("imagem"), async (req, res) => {
