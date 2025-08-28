@@ -3,6 +3,7 @@ import prisma from "../utils/prisma.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import tokenDecodificar from "../utils/tokenDecodificar.js";
+import conversaoMoedas from "../utils/conversaoMoedas.js";
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -57,7 +58,10 @@ router.post("/login", async (req, res) => {
 
 router.get("/produtos", async (req, res) => {
   try {
-    const produtos = await prisma.produto.findMany();
+    const response = await prisma.produto.findMany();
+    if (response) {
+      var produtos = conversaoMoedas.centavosParaReais(response);
+    }
     return res
       .status(200)
       .json({ message: "Produtos listados com sucesso!", produtos: produtos });
@@ -67,6 +71,7 @@ router.get("/produtos", async (req, res) => {
       .json({ message: "Erro no servidor, tente novamente" });
   }
 });
+
 router.get("/usuarios", async (req, res) => {
   const tokenn = req.headers.authorization;
   const userInfosJwt = await tokenDecodificar.decodedToken(tokenn);
@@ -132,29 +137,87 @@ router.get("/usuario-carrinho", async (req, res) => {
   }
 });
 router.put("/usuario-carrinho", async (req, res) => {
-  const tokenUser = await tokenDecodificar.decodedToken(
-    req.headers.authorization
-  );
-  const produtoId = req.body.produtoId;
-  const user = await prisma.user.findUnique({ where: { id: tokenUser.id } });
-  user.carrinho.pop(produtoId);
   try {
+    const tokenUser = await tokenDecodificar.decodedToken(
+      req.headers.authorization
+    );
+    const produtoId = req.body.produtoId;
+
+    const user = await prisma.user.findUnique({
+      where: { id: tokenUser.id },
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: "Usuário não encontrado!" });
+    }
+    const carrinhoAtualizado = user.carrinho.filter((id) => id !== produtoId);
+
+    // Verifica se algum produto foi removido
+    if (carrinhoAtualizado.length === user.carrinho.length) {
+      return res.status(400).json({
+        message: "Produto não encontrado no carrinho!",
+      });
+    }
+
     const response = await prisma.user.update({
       where: { id: user.id },
       data: {
-        nome: user.nome,
-        email: user.email,
-        senha: user.senha,
-        carrinho: user.carrinho,
+        carrinho: carrinhoAtualizado,
       },
     });
+
     res.status(200).json({
       message: "Produto removido com sucesso!",
-      produtoId: response.carrinho,
+      carrinho: response.carrinho,
+      produtoRemovido: produtoId,
     });
   } catch (error) {
-    res.status(500).json({ message: "Erro no servidor, tenta novamente!" });
-    console.log(error);
+    console.error("Erro ao remover produto:", error);
+    res.status(500).json({
+      message: "Erro no servidor, tenta novamente!",
+      error: error.message,
+    });
+  }
+});
+router.put("/produtosRemovidosBanco", async (req, res) => {
+  const produtos = req.body.produtos;
+  console.log(produtos);
+  if (produtos.length > 0) {
+    const tokenUser = await tokenDecodificar.decodedToken(
+      req.headers.authorization
+    );
+    if (tokenUser) {
+      const user = await prisma.user.findUnique({
+        where: {
+          id: tokenUser.id,
+        },
+      });
+      if (user) {
+        const newProdutosUser = user.carrinho.filter(
+          (produto) => !produtos.includes(produto)
+        );
+        if (newProdutosUser) {
+          const response = await prisma.user.update({
+            where: { id: user.id },
+            data: {
+              carrinho: newProdutosUser,
+            },
+          });
+          console.log(response);
+          return res
+            .status(200)
+            .json({ message: "carrinho atualizado!", user: response });
+        }
+      } else {
+        return res.status(404).json({ message: "Usuário não encontrado!" });
+      }
+    } else {
+      return res.status(404).json({ message: "Não está logado" });
+    }
+  } else {
+    return res
+      .status(404)
+      .json({ message: "Nenhum produto foi removido do banco!" });
   }
 });
 
