@@ -1,6 +1,6 @@
 import express from "express";
 import prisma from "../utils/prisma.js";
-import produto from "./produtos.js";
+import produto from "./produtosPrivate.js";
 import tokenDecodificar from "../utils/tokenDecodificar.js";
 const app = express();
 app.use("/produtos", produto);
