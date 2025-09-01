@@ -116,7 +116,7 @@ app.put("/", upload.single("imagem"), async (req, res) => {
         imagem: novaImagemUrl, // Nova ou mantém a atual
       },
     });
-
+    fs.unlinkSync(req.file.path);
     res.status(200).json({
       message: "Produto atualizado com sucesso!",
       produto: produtoAtualizado,

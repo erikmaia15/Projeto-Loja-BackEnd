@@ -4,7 +4,7 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import tokenDecodificar from "../utils/tokenDecodificar.js";
 import conversaoMoedas from "../utils/conversaoMoedas.js";
-
+import { MercadoPagoConfig, Payment } from "mercadopago";
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -23,7 +23,7 @@ router.post("/cadastro", async (req, res) => {
     res.status(201).json(response);
   } catch (error) {
     console.log(error);
-    res.status(404).json({ message: "Já existe usuário com esse email!" });
+    res.status(404).json({ message: "Já existe um usuário com esse email!" });
   }
 });
 router.post("/login", async (req, res) => {
@@ -219,6 +219,50 @@ router.put("/produtosRemovidosBanco", async (req, res) => {
       .status(404)
       .json({ message: "Nenhum produto foi removido do banco!" });
   }
+});
+
+router.post("/pagamento", async (req, res) => {
+  const { carrinho, valorCompra } = req.body.dadosProdutos;
+  console.log(carrinho);
+  console.log(valorCompra);
+  const client = new MercadoPagoConfig({
+    accessToken: process.env.PAYMENT_TOKEN_ACESS_TEST,
+  });
+  const body = JSON.parse(req.body.dados.body);
+  const payment = new Payment(client);
+  const reverseTimestamp = Date.now().toString().split("").reverse().join("");
+  const randomSuffix = Math.random().toString(36).substring(2, 8);
+  const uniqueKey = `payment_${reverseTimestamp}_${randomSuffix}`;
+
+  const paymentBody = {
+    transaction_amount: body.transaction_amount,
+    token: body.token,
+    description: body.description,
+    installments: body.installments,
+    payment_method_id: body.payment_method_id,
+    issuer_id: body.issuer_id,
+    payer: {
+      email: body.payer.email,
+      identification: {
+        type: body.payer.identification.type,
+        number: body.payer.identification.number,
+      },
+    },
+  };
+  payment
+    .create({
+      body: paymentBody,
+      requestOptions: { idempotencyKey: uniqueKey },
+    })
+    .then((result) => {
+      console.log(result);
+      res.status(201).json({ message: "Sucesso, comprou!", resultado: result });
+    })
+    .catch((error) => {
+      console.log(error);
+      console.log("Erro completo:", JSON.stringify(error, null, 2));
+      res.status(error.status || 500).json(error);
+    });
 });
 
 export default router;
