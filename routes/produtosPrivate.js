@@ -5,7 +5,6 @@ import cloudinary from "../src/config/cloudinary.js";
 import fs from "fs";
 
 const app = express();
-
 app.post("/", upload.single("imagem"), async (req, res) => {
   console.log("Arquivo recebido:", req.file); // Verifique se o arquivo chega
   try {
@@ -47,7 +46,6 @@ app.put("/", upload.single("imagem"), async (req, res) => {
   console.log("req.body:", req.body);
   console.log("req.file:", req.file);
 
-  // ✅ MUDANÇA: Montar o objeto produto a partir dos campos individuais do FormData
   const produto = {
     id: req.body.id,
     tituloProduto: req.body.tituloProduto,
@@ -56,13 +54,12 @@ app.put("/", upload.single("imagem"), async (req, res) => {
     QtdEstoque: parseInt(req.body.QtdEstoque),
   };
 
-  // Validação básica
   if (!produto.id) {
     return res.status(400).json({ message: "ID do produto é obrigatório" });
   }
 
   try {
-    // 1. Buscar produto atual para pegar URL da imagem antiga
+    // 1. Buscar produto atual
     const produtoAtual = await prisma.produto.findUnique({
       where: { id: produto.id },
       select: { imagem: true },
@@ -72,36 +69,37 @@ app.put("/", upload.single("imagem"), async (req, res) => {
       return res.status(404).json({ message: "Produto não encontrado" });
     }
 
-    let novaImagemUrl = produtoAtual.imagem; // Manter imagem atual por padrão
+    let novaImagemUrl = produtoAtual.imagem; // por padrão mantém a antiga
 
-    // 2. Se tem nova imagem, fazer upload e deletar a antiga
+    // 2. Se veio uma nova imagem, faz upload
     if (req.file) {
       try {
-        // Upload da nova imagem
         const uploadResult = await cloudinary.uploader.upload(req.file.path, {
           folder: "",
         });
 
         novaImagemUrl = uploadResult.secure_url;
 
-        // 3. Deletar imagem antiga do Cloudinary (se existir)
+        // 3. Se tinha imagem antiga, deletar no Cloudinary
         if (
           produtoAtual.imagem &&
           produtoAtual.imagem.includes("cloudinary.com")
         ) {
-          // Extrair public_id da URL antiga
           const urlParts = produtoAtual.imagem.split("/");
           const publicIdWithExtension = urlParts[urlParts.length - 1];
-          const publicId = `/${publicIdWithExtension.split(".")[0]}`;
+          const publicId = publicIdWithExtension.split(".")[0];
 
           await cloudinary.uploader.destroy(publicId);
           console.log(`Imagem antiga deletada: ${publicId}`);
         }
+
+        // ✅ Apagar arquivo temporário do servidor
+        fs.unlinkSync(req.file.path);
       } catch (uploadError) {
         console.error("Erro no upload:", uploadError);
-        return res.status(500).json({
-          message: "Erro ao fazer upload da imagem",
-        });
+        return res
+          .status(500)
+          .json({ message: "Erro ao fazer upload da imagem" });
       }
     }
 
@@ -112,20 +110,18 @@ app.put("/", upload.single("imagem"), async (req, res) => {
         tituloProduto: produto.tituloProduto,
         descricao: produto.descricao,
         precoCentavos: produto.precoCentavos,
-        QtdEstoque: produto.QtdEstoque, // ✅ ADICIONEI: Atualizar estoque também
-        imagem: novaImagemUrl, // Nova ou mantém a atual
+        QtdEstoque: produto.QtdEstoque,
+        imagem: novaImagemUrl,
       },
     });
-    fs.unlinkSync(req.file.path);
+
     res.status(200).json({
       message: "Produto atualizado com sucesso!",
       produto: produtoAtualizado,
     });
   } catch (error) {
     console.error("Erro ao atualizar produto:", error);
-    res.status(500).json({
-      message: "Erro no servidor, tente novamente!",
-    });
+    res.status(500).json({ message: "Erro no servidor, tente novamente!" });
   }
 });
 

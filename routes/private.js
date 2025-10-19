@@ -7,7 +7,7 @@ app.use("/produtos", produto);
 
 app.get("/listar-usuarios", async (req, res) => {
   try {
-    const users = await prisma.user.findMany();
+    const users = await prisma.user.findMany({ include: { compras: true } });
     res.status(200).json({
       message: "Lista de usuários",
       users: users,
@@ -60,5 +60,33 @@ app.put("/atualizar-usuario-admin", async (req, res) => {
     res.status(404).json({ message: "Usuário não é administrador!" });
   }
 });
-
+app.get("/compras-cliente:clientId", async (req, res) => {
+  const clienteId = req.params.clientId;
+  try {
+    const compras = await prisma.compra.findMany({
+      where: { usuarioId: clienteId, status: "approved" },
+      include: {
+        itens: true, // Isso já traz todos os itens de cada compra
+        usuario: {
+          select: {
+            nome: true,
+            email: true,
+          },
+        },
+      },
+      orderBy: {
+        dataCriado: "desc", // Mais recentes primeiro
+      },
+    });
+    console.log(compras);
+    res.status(200).json({
+      message: "Lista de compras do usuário listada com sucesso!",
+      userCompras: compras,
+    });
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Erro no servidor, tente novamente!", erro: error });
+  }
+});
 export default app;

@@ -21,6 +21,7 @@ model User {
   senha   String
   isAdmin Boolean  @default(false)
   carrinho String[]
+  compras Compra[]
 }
 model Produto {
   id      String   @id @default(auto()) @map("_id") @db.ObjectId
@@ -29,4 +30,30 @@ model Produto {
   precoCentavos Int
   QtdEstoque Int
   imagem String
+}
+model Compra {
+  id            String       @id @default(auto()) @map("_id") @db.ObjectId
+  usuarioId     String       @db.ObjectId
+  mpIdCompra    String       @unique
+  usuario       User         @relation(fields: [usuarioId], references: [id])
+  valorCentavos Int
+  parcelas      Int
+  status        String
+  metodoPagamento String?    
+  itens         CompraItem[]
+  dataCriado    DateTime     
+  updatedAt     DateTime     @updatedAt
+}
+
+model CompraItem {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  compraId      String   @db.ObjectId
+  compra        Compra   @relation(fields: [compraId], references: [id])
+  produtoId     String?   // opcional, se quiser referenciar
+  nomeProduto   String
+  descricao     String
+  imagem        String
+  precoUnitario Int       // preço congelado
+  quantidade    Int
+  subtotal      Int
 }
