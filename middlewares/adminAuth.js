@@ -1,23 +1,32 @@
 import jwt from "jsonwebtoken";
+
 const JWT_SECRET = process.env.JWT_SECRET;
+
 const auth = (req, res, next) => {
-  const token = req.headers.authorization;
-  console.log(token);
-  if (!token) {
-    return res.status(401).json({ message: "acesso negado" });
+  const authHeader = req.headers.authorization;
+
+  // ✅ Verificação segura sem logs desnecessários
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({ message: "Token de acesso não fornecido" });
   }
+
+  const token = authHeader.replace("Bearer ", "");
+
   try {
-    const decodificar = jwt.verify(token.replace("Bearer ", ""), JWT_SECRET);
-    if (decodificar.isAdmin === true) {
-      next();
-    } else {
+    const decodificar = jwt.verify(token, JWT_SECRET);
+
+    if (!decodificar.isAdmin) {
       return res
-        .status(400)
-        .json({ message: "Sem privilégios de administrador" });
+        .status(403)
+        .json({ message: "Privilégios de administrador necessários" });
     }
+
+    // ✅ Opcional: Adicionar usuário decodificado ao request
+    req.user = decodificar;
+    next();
   } catch (error) {
-    console.log(error);
-    return res.status(401).json({ message: "Token inválido!!" });
+    console.log("Erro na verificação do token:", error.message);
+    return res.status(401).json({ message: "Token inválido ou expirado" });
   }
 };
 
