@@ -11,7 +11,7 @@ router.post("/", async (req, res) => {
 
     const valorCompraBaseFormatado = parseInt(valorCompra.replace(",", ""));
     const client = new MercadoPagoConfig({
-      accessToken: process.env.PAYMENT_TOKEN_ACESS_TEST,
+      accessToken: process.env.PAYMENT_TOKEN_ACESS_PRODUCT,
     });
 
     const payment = new Payment(client);
@@ -36,8 +36,7 @@ router.post("/", async (req, res) => {
           number: body.payer.identification.number,
         },
       },
-      notification_url:
-        "https://8abca31cde09.ngrok-free.app/pagamento/payment-webhook-mp",
+      notification_url: "https://projeto-loja-maiastore-backend.onrender.com/",
     };
 
     // Processar pagamento no Mercado Pago

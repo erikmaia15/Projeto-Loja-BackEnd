@@ -1,5 +1,16 @@
-import express from "express";
+import dotenv from "dotenv";
+dotenv.config(); // ⚠️ DEVE SER A PRIMEIRA LINHA
 import cors from "cors";
+import express from "express";
+
+console.log(
+  "DATABASE_URL:",
+  process.env.DATABASE_URL ? "Configurada" : "Não configurada"
+);
+console.log(
+  "JWT_SECRET:",
+  process.env.JWT_SECRET ? "Configurada" : "Não configurada"
+);
 
 const app = express();
 

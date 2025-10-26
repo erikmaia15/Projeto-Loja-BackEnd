@@ -2,23 +2,33 @@ import express from "express";
 import prisma from "../utils/prisma.js";
 import upload from "../src/config/upload.js";
 import cloudinary from "../src/config/cloudinary.js";
-import fs from "fs";
 
 const app = express();
 app.post("/", upload.single("imagem"), async (req, res) => {
-  console.log("Arquivo recebido:", req.file); // Verifique se o arquivo chega
+  console.log("Arquivo recebido:", req.file);
   try {
     if (!req.file) {
       return res.status(400).json({
         error: "Nenhum arquivo recebido",
-        headers: req.headers, // Mostra os headers recebidos
+        headers: req.headers,
         body: req.body,
       });
     }
 
-    // 1. Upload para o Cloudinary
-    const result = await cloudinary.uploader.upload(req.file.path, {
-      folder: "",
+    // 1. Upload para o Cloudinary usando buffer (memória)
+    const result = await new Promise((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          folder: "",
+        },
+        (error, result) => {
+          if (error) reject(error);
+          else resolve(result);
+        }
+      );
+
+      // Envia o buffer diretamente para o Cloudinary
+      uploadStream.end(req.file.buffer);
     });
 
     // 2. Salva no banco de dados
@@ -32,8 +42,8 @@ app.post("/", upload.single("imagem"), async (req, res) => {
       },
     });
 
-    // 3. Remove o arquivo temporário
-    fs.unlinkSync(req.file.path);
+    // ❌ REMOVA esta linha - não há arquivo temporário para deletar
+    // fs.unlinkSync(req.file.path);
 
     res.status(201).json(produto);
   } catch (error) {
@@ -69,13 +79,24 @@ app.put("/", upload.single("imagem"), async (req, res) => {
       return res.status(404).json({ message: "Produto não encontrado" });
     }
 
-    let novaImagemUrl = produtoAtual.imagem; // por padrão mantém a antiga
+    let novaImagemUrl = produtoAtual.imagem;
 
     // 2. Se veio uma nova imagem, faz upload
     if (req.file) {
       try {
-        const uploadResult = await cloudinary.uploader.upload(req.file.path, {
-          folder: "",
+        // Upload usando buffer (memória)
+        const uploadResult = await new Promise((resolve, reject) => {
+          const uploadStream = cloudinary.uploader.upload_stream(
+            {
+              folder: "",
+            },
+            (error, result) => {
+              if (error) reject(error);
+              else resolve(result);
+            }
+          );
+
+          uploadStream.end(req.file.buffer);
         });
 
         novaImagemUrl = uploadResult.secure_url;
@@ -93,8 +114,8 @@ app.put("/", upload.single("imagem"), async (req, res) => {
           console.log(`Imagem antiga deletada: ${publicId}`);
         }
 
-        // ✅ Apagar arquivo temporário do servidor
-        fs.unlinkSync(req.file.path);
+        // ❌ REMOVA esta linha - não há arquivo temporário
+        // fs.unlinkSync(req.file.path);
       } catch (uploadError) {
         console.error("Erro no upload:", uploadError);
         return res
