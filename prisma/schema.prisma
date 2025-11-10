@@ -1,9 +1,6 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -12,7 +9,6 @@ datasource db {
   provider = "mongodb"
   url      = env("DATABASE_URL")
 }
-
 
 model User {
   id      String   @id @default(auto()) @map("_id") @db.ObjectId
@@ -23,14 +19,18 @@ model User {
   carrinho String[]
   compras Compra[]
 }
+
 model Produto {
-  id      String   @id @default(auto()) @map("_id") @db.ObjectId
+  id            String     @id @default(auto()) @map("_id") @db.ObjectId
   tituloProduto String
-  descricao String
+  descricao     String
   precoCentavos Int
-  QtdEstoque Int
-  imagem String
+  QtdEstoque    Int
+  imagem        String
+  categoriaId   String     @db.ObjectId  // ✅ Voltar para obrigatório
+  categoria     Categoria  @relation(fields: [categoriaId], references: [id])
 }
+
 model Compra {
   id            String       @id @default(auto()) @map("_id") @db.ObjectId
   usuarioId     String       @db.ObjectId
@@ -56,4 +56,10 @@ model CompraItem {
   precoUnitario Int       // preço congelado
   quantidade    Int
   subtotal      Int
+}
+
+model Categoria {
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  nome      String    @unique
+  produtos  Produto[]
 }

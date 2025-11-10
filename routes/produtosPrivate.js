@@ -5,6 +5,7 @@ import cloudinary from "../src/config/cloudinary.js";
 
 const app = express();
 app.post("/", upload.single("imagem"), async (req, res) => {
+  console.log(req.body.categoria);
   console.log("Arquivo recebido:", req.file);
   try {
     if (!req.file) {
@@ -39,6 +40,7 @@ app.post("/", upload.single("imagem"), async (req, res) => {
         precoCentavos: parseInt(req.body.precoCentavos),
         QtdEstoque: parseInt(req.body.QtdEstoque),
         imagem: result.secure_url, // URL da imagem no Cloudinary
+        categoriaId: req.body.categoriaId,
       },
     });
 
@@ -62,6 +64,7 @@ app.put("/", upload.single("imagem"), async (req, res) => {
     descricao: req.body.descricao,
     precoCentavos: parseInt(req.body.precoCentavos),
     QtdEstoque: parseInt(req.body.QtdEstoque),
+    categoriaId: req.body.categoriaId,
   };
 
   if (!produto.id) {
@@ -133,6 +136,7 @@ app.put("/", upload.single("imagem"), async (req, res) => {
         precoCentavos: produto.precoCentavos,
         QtdEstoque: produto.QtdEstoque,
         imagem: novaImagemUrl,
+        categoriaId: produto.categoriaId,
       },
     });
 

@@ -2,8 +2,10 @@ import express from "express";
 import prisma from "../utils/prisma.js";
 import produto from "./produtosPrivate.js";
 import tokenDecodificar from "../utils/tokenDecodificar.js";
+import categoria from "./categoriasPrivate.js";
 const app = express();
 app.use("/produtos", produto);
+app.use("/categorias", categoria);
 
 app.get("/listar-usuarios", async (req, res) => {
   try {
@@ -64,7 +66,7 @@ app.get("/compras-cliente:clientId", async (req, res) => {
   const clienteId = req.params.clientId;
   try {
     const compras = await prisma.compra.findMany({
-      where: { usuarioId: clienteId, status: "approved" },
+      where: { usuarioId: clienteId },
       include: {
         itens: true, // Isso já traz todos os itens de cada compra
         usuario: {

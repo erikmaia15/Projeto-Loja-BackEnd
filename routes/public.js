@@ -17,10 +17,13 @@ router.use("/usuario-carrinho", userCarrinho);
 router.use("/compras", compras);
 
 router.get("/produtos", async (req, res) => {
-  // Executar
-
+  const page = parseInt(req.query.page);
+  const size = parseInt(req.query.size);
   try {
-    const response = await prisma.produto.findMany();
+    const response = await prisma.produto.findMany({
+      skip: page,
+      take: size,
+    });
     if (response) {
       var produtos = conversaoMoedas.centavosParaReais(response);
     }
