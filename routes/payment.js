@@ -1,5 +1,5 @@
 import express, { response } from "express";
-import { MercadoPagoConfig, Payment } from "mercadopago";
+import { MercadoPagoConfig, Payment, Preference } from "mercadopago";
 import prisma from "../utils/prisma.js";
 import tokenDecodificar from "../utils/tokenDecodificar.js";
 const router = express.Router();
@@ -9,6 +9,7 @@ router.post("/", async (req, res) => {
 
   try {
     const { valorCompra, compras } = req.body.dadosProdutos;
+
     const body = JSON.parse(req.body.dados.body);
 
     const token = await tokenDecodificar.decodedToken(
@@ -19,15 +20,25 @@ router.post("/", async (req, res) => {
     if (!usuarioId) {
       return res.status(400).json({ error: "ID do usuário é obrigatório" });
     }
-
+    const items = [];
     // 🔥 PRIMEIRO: Criar compra temporária
     compraTemporaria = await prisma.compra.create({
       data: {
         usuarioId: usuarioId,
-        parcelas: parseInt(body.installments),
+        parcelas: parseInt(body.installments) || 1,
         status: "processando", // status temporário
         itens: {
           create: compras.map((item) => {
+            items.push({
+              id: item.produto.id,
+              category_id: item.produto.categoriaId,
+              description: item.produto.descricao,
+              quantity: item.quantidadeComprado,
+              title: item.produto.tituloProduto,
+              unit_price: parseFloat(
+                item.produto.precoCentavos.toString().replace(",", ".")
+              ),
+            });
             const precoUnitarioCentavos = Math.round(
               parseFloat(
                 item.produto.precoCentavos.toString().replace(",", ".")
@@ -58,12 +69,12 @@ router.post("/", async (req, res) => {
     const uniqueKey = `payment_${usuarioId}_${Date.now()}_${Math.random()
       .toString(36)
       .substring(2, 8)}`;
-
+    console.log(items);
     const paymentBody = {
       transaction_amount: parseFloat(body.transaction_amount),
       token: body.token,
       description: body.description,
-      installments: parseInt(body.installments),
+      installments: parseInt(body.installments) || 1,
       payment_method_id: body.payment_method_id,
       issuer_id: body.issuer_id,
       payer: {
@@ -85,10 +96,17 @@ router.post("/", async (req, res) => {
         requestOptions: { idempotencyKey: uniqueKey },
       });
     } catch (mpError) {
+      console.log(mpError);
       // Se der erro no MP, deletar a compra temporária
-      await prisma.compra.delete({
-        where: { id: compraTemporaria.id },
-      });
+      await prisma.$transaction([
+        prisma.compraItem.deleteMany({
+          where: { compraId: compraTemporaria.id },
+        }),
+        prisma.compra.delete({
+          where: { id: compraTemporaria.id },
+        }),
+      ]);
+
       throw mpError;
     }
 
@@ -228,7 +246,7 @@ router.post("/payment-webhook-mp", async (req, res) => {
       `https://api.mercadopago.com/v1/payments/${paymentId}`,
       {
         headers: {
-          Authorization: `Bearer ${process.env.PAYMENT_TOKEN_ACESS_TEST}`,
+          Authorization: `Bearer ${process.env.PAYMENT_TOKEN_ACESS_PRODUCT}`,
         },
       }
     );
