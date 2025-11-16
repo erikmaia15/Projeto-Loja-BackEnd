@@ -20,8 +20,7 @@ router.post("/", async (req, res) => {
     if (!usuarioId) {
       return res.status(400).json({ error: "ID do usuário é obrigatório" });
     }
-    const items = [];
-    // 🔥 PRIMEIRO: Criar compra temporária
+    // const items = [];
     compraTemporaria = await prisma.compra.create({
       data: {
         usuarioId: usuarioId,
@@ -29,16 +28,16 @@ router.post("/", async (req, res) => {
         status: "processando", // status temporário
         itens: {
           create: compras.map((item) => {
-            items.push({
-              id: item.produto.id,
-              category_id: item.produto.categoriaId,
-              description: item.produto.descricao,
-              quantity: item.quantidadeComprado,
-              title: item.produto.tituloProduto,
-              unit_price: parseFloat(
-                item.produto.precoCentavos.toString().replace(",", ".")
-              ),
-            });
+            // items.push({
+            //   id: item.produto.id,
+            //   category_id: item.produto.categoriaId,
+            //   description: item.produto.descricao,
+            //   quantity: item.quantidadeComprado,
+            //   title: item.produto.tituloProduto,
+            //   unit_price: parseFloat(
+            //     item.produto.precoCentavos.toString().replace(",", ".")
+            //   ),
+            // });
             const precoUnitarioCentavos = Math.round(
               parseFloat(
                 item.produto.precoCentavos.toString().replace(",", ".")
@@ -69,7 +68,7 @@ router.post("/", async (req, res) => {
     const uniqueKey = `payment_${usuarioId}_${Date.now()}_${Math.random()
       .toString(36)
       .substring(2, 8)}`;
-    console.log(items);
+    // console.log(items);
     const paymentBody = {
       transaction_amount: parseFloat(body.transaction_amount),
       token: body.token,
@@ -250,17 +249,20 @@ router.post("/payment-webhook-mp", async (req, res) => {
         },
       }
     );
-
     if (!mpResponse.ok) {
+      const erro = await mpResponse.json();
+      console.log("deu errro");
+      console.log(erro);
       throw new Error(`Erro ao buscar pagamento: ${mpResponse.status}`);
     }
 
     const pagamento = await mpResponse.json();
+    console.log(pagamento);
 
     const mpId = pagamento.id.toString();
 
     const compraAtualizada = await prisma.compra.update({
-      where: { mpIdCompra: mpId }, // Agora funciona com @unique
+      where: { id: pagamento.external_reference },
       data: { status: pagamento.status },
     });
 

@@ -5,7 +5,7 @@ import tokenDecodificar from "../utils/tokenDecodificar.js";
 import categoria from "./categoriasPrivate.js";
 const app = express();
 app.use("/produtos", produto);
-app.use("/categorias", categoria);
+app.use("/categoriasPrivate", categoria);
 
 app.get("/listar-usuarios", async (req, res) => {
   try {

@@ -8,6 +8,7 @@ import pagamentos from "./payment.js";
 import usuarios from "./usuarioPublic/usuarios.js";
 import userCarrinho from "./usuarioPublic/userCarrinho.js";
 import compras from "./compras.js";
+import categorias from "./categorias.js";
 const router = express.Router();
 router.use("/pagamento", pagamentos);
 router.use("/cadastro", cadastro);
@@ -15,6 +16,7 @@ router.use("/login", login);
 router.use("/usuarios", usuarios);
 router.use("/usuario-carrinho", userCarrinho);
 router.use("/compras", compras);
+router.use("/categorias", categorias);
 
 router.get("/produtos", async (req, res) => {
   const page = parseInt(req.query.page);
