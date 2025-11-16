@@ -20,39 +20,39 @@ router.post("/", async (req, res) => {
     if (!usuarioId) {
       return res.status(400).json({ error: "ID do usuário é obrigatório" });
     }
-    // const items = [];
+
+    // Primeiro gera os itens resolvendo o async
+    const itensParaCriar = await Promise.all(
+      compras.map(async (item) => {
+        const categoria = await prisma.categoria.findUnique({
+          where: { id: item.produto.categoriaId },
+        });
+
+        // Prepara item para salvar na compra
+        const precoUnitarioCentavos = Math.round(
+          parseFloat(item.produto.precoCentavos.toString().replace(",", "."))
+        );
+
+        return {
+          produtoId: item.produto.id,
+          nomeProduto: item.produto.tituloProduto,
+          descricao: item.produto.descricao,
+          imagem: item.produto.imagem,
+          precoUnitario: precoUnitarioCentavos,
+          quantidade: item.quantidadeComprado,
+          subtotal: precoUnitarioCentavos * item.quantidadeComprado,
+        };
+      })
+    );
+
+    // Agora sim, cria a compra com os itens já resolvidos
     compraTemporaria = await prisma.compra.create({
       data: {
         usuarioId: usuarioId,
         parcelas: parseInt(body.installments) || 1,
-        status: "processando", // status temporário
+        status: "processando",
         itens: {
-          create: compras.map((item) => {
-            // items.push({
-            //   id: item.produto.id,
-            //   category_id: item.produto.categoriaId,
-            //   description: item.produto.descricao,
-            //   quantity: item.quantidadeComprado,
-            //   title: item.produto.tituloProduto,
-            //   unit_price: parseFloat(
-            //     item.produto.precoCentavos.toString().replace(",", ".")
-            //   ),
-            // });
-            const precoUnitarioCentavos = Math.round(
-              parseFloat(
-                item.produto.precoCentavos.toString().replace(",", ".")
-              )
-            );
-            return {
-              produtoId: item.produto.id,
-              nomeProduto: item.produto.tituloProduto,
-              descricao: item.produto.descricao,
-              imagem: item.produto.imagem,
-              precoUnitario: precoUnitarioCentavos,
-              quantidade: item.quantidadeComprado,
-              subtotal: precoUnitarioCentavos * item.quantidadeComprado,
-            };
-          }),
+          create: itensParaCriar,
         },
       },
     });
@@ -68,7 +68,8 @@ router.post("/", async (req, res) => {
     const uniqueKey = `payment_${usuarioId}_${Date.now()}_${Math.random()
       .toString(36)
       .substring(2, 8)}`;
-    // console.log(items);
+
+    // 🚫 REMOVIDO: items
     const paymentBody = {
       transaction_amount: parseFloat(body.transaction_amount),
       token: body.token,
@@ -86,6 +87,18 @@ router.post("/", async (req, res) => {
       notification_url: `${process.env.URL_BACKEND}/pagamento/payment-webhook-mp`,
       external_reference: externalReference,
       statement_descriptor: "Maia Store",
+      additional_info: {
+        items: compras.map((item) => ({
+          id: item.produto.id.toString(), // ID único do item
+          title: item.produto.tituloProduto, // Nome do produto
+          description: item.produto.descricao, // Descrição
+          category_id: item.produto.categoriaId, // categoria (ID ou nome, ambos aceitos)
+          quantity: item.produto.quantidadeComprado,
+          unit_price: parseFloat(
+            item.produto.precoCentavos.toString().replace(",", ".")
+          ),
+        })),
+      },
     };
 
     let result;
@@ -96,7 +109,7 @@ router.post("/", async (req, res) => {
       });
     } catch (mpError) {
       console.log(mpError);
-      // Se der erro no MP, deletar a compra temporária
+
       await prisma.$transaction([
         prisma.compraItem.deleteMany({
           where: { compraId: compraTemporaria.id },
@@ -112,7 +125,6 @@ router.post("/", async (req, res) => {
     console.log("MP Payment ID:", result.id);
     console.log("MP Status:", result.status);
 
-    // 🔥 CORREÇÃO: Usar findFirst em vez de findUnique
     const compraExistente = await prisma.compra.findFirst({
       where: {
         mpIdCompra: result.id.toString(),
@@ -120,7 +132,6 @@ router.post("/", async (req, res) => {
     });
 
     if (compraExistente) {
-      // Se já existe, deletar a temporária e retornar a existente
       await prisma.compra.delete({
         where: { id: compraTemporaria.id },
       });
@@ -132,7 +143,6 @@ router.post("/", async (req, res) => {
       });
     }
 
-    // 🔥 Se o pagamento foi rejeitado, tratar adequadamente
     if (result.status === "rejected") {
       const compraAtualizada = await prisma.compra.update({
         where: { id: compraTemporaria.id },
@@ -154,9 +164,7 @@ router.post("/", async (req, res) => {
       });
     }
 
-    // 🔥 Se foi aprovado, atualizar estoque e compra
     const compraAtualizada = await prisma.$transaction(async (tx) => {
-      // Atualizar estoque apenas se o pagamento foi aprovado
       if (result.status === "approved") {
         for (const item of compras) {
           await tx.produto.update({
@@ -168,7 +176,6 @@ router.post("/", async (req, res) => {
         }
       }
 
-      // Atualizar compra com dados do MP
       return await tx.compra.update({
         where: { id: compraTemporaria.id },
         data: {
@@ -202,7 +209,6 @@ router.post("/", async (req, res) => {
   } catch (error) {
     console.log("Erro ao processar pagamento:", error);
 
-    // Limpar compra temporária em caso de erro
     if (compraTemporaria) {
       try {
         await prisma.compra.delete({
@@ -213,7 +219,6 @@ router.post("/", async (req, res) => {
       }
     }
 
-    // Tratamento específico para P2002
     if (error.code === "P2002") {
       return res.status(400).json({
         error: "Erro de duplicação no banco de dados",
@@ -259,8 +264,6 @@ router.post("/payment-webhook-mp", async (req, res) => {
     const pagamento = await mpResponse.json();
     console.log(pagamento);
 
-    const mpId = pagamento.id.toString();
-
     const compraAtualizada = await prisma.compra.update({
       where: { id: pagamento.external_reference },
       data: { status: pagamento.status },
@@ -279,4 +282,5 @@ router.post("/payment-webhook-mp", async (req, res) => {
     res.status(500).json({ error: "Erro interno" });
   }
 });
+
 export default router;
