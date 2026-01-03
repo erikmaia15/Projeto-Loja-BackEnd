@@ -1,5 +1,5 @@
 import express, { response } from "express";
-import { MercadoPagoConfig, Payment, Preference } from "mercadopago";
+import { MercadoPagoConfig, Payment } from "mercadopago";
 import prisma from "../utils/prisma.js";
 import tokenDecodificar from "../utils/tokenDecodificar.js";
 const router = express.Router();
@@ -24,10 +24,6 @@ router.post("/", async (req, res) => {
     // Primeiro gera os itens resolvendo o async
     const itensParaCriar = await Promise.all(
       compras.map(async (item) => {
-        const categoria = await prisma.categoria.findUnique({
-          where: { id: item.produto.categoriaId },
-        });
-
         // Prepara item para salvar na compra
         const precoUnitarioCentavos = Math.round(
           parseFloat(item.produto.precoCentavos.toString().replace(",", "."))
@@ -87,18 +83,6 @@ router.post("/", async (req, res) => {
       notification_url: `${process.env.URL_BACKEND}/pagamento/payment-webhook-mp`,
       external_reference: externalReference,
       statement_descriptor: "Maia Store",
-      additional_info: {
-        items: compras.map((item) => ({
-          id: item.produto.id.toString(), // ID único do item
-          title: item.produto.tituloProduto, // Nome do produto
-          description: item.produto.descricao, // Descrição
-          category_id: item.produto.categoriaId, // categoria (ID ou nome, ambos aceitos)
-          quantity: item.produto.quantidadeComprado,
-          unit_price: parseFloat(
-            item.produto.precoCentavos.toString().replace(",", ".")
-          ),
-        })),
-      },
     };
 
     let result;

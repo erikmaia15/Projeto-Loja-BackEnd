@@ -9,10 +9,31 @@ app.use("/categoriasPrivate", categoria);
 
 app.get("/listar-usuarios", async (req, res) => {
   try {
-    const users = await prisma.user.findMany({ include: { compras: true } });
+    let page = parseInt(req.params.page) || 1; // página começa em 1
+    let size = parseInt(req.params.size) || 10;
+
+    const skip = (page - 1) * size;
+
+    // busca os usuários paginados
+    const users = await prisma.user.findMany({
+      include: { compras: true },
+      skip: skip,
+      take: size,
+    });
+
+    // pega o total de usuários do banco
+    const totalUsers = await prisma.user.count();
+    const totalPages = Math.ceil(totalUsers / size);
+
     res.status(200).json({
       message: "Lista de usuários",
-      users: users,
+      users,
+      pagination: {
+        page,
+        size,
+        totalUsers,
+        totalPages,
+      },
     });
   } catch (error) {
     console.log(error);
