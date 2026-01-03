@@ -73,9 +73,6 @@ router.post("/", async (req, res) => {
 
     const payment = new Payment(client);
     let valorFinal = parseFloat(totalCentavos / 100);
-    console.log(valorFinal);
-    console.log(compras[0].produto.descricao);
-    console.log(user.email);
     const descricao = compras[0].produto.descricao;
     const pagamento = await payment.create({
       body: {
@@ -83,24 +80,13 @@ router.post("/", async (req, res) => {
         description: descricao.toString(),
         payment_method_id: "pix",
         payer: {
-          email: "erik.maia15oliveira@gmail.com" || user.email,
+          email: user.email || "erik.maia15oliveira@gmail.com",
         },
+        external_reference: compra.id, // 🔥 ESSENCIAL
         notification_url: `${process.env.URL_BACKEND}/pagamento-pix/payment-webhook-mp`,
       },
       requestOptions: { idempotencyKey: compra.id },
     });
-    // const pagamento = await payment.create({
-    //   body: {
-    //     transaction_amount: valorFinal, // PIX usa reais
-    //     description: compras[0].produto.descricao,
-    //     payment_method_id: "pix",
-    //     payer: {
-    //       email: user.email,
-    //     },
-    //     // notification_url: `${process.env.URL_BACKEND}/pagamento-pix/webhook`,
-    //   },
-    //   external_reference: compra.id, // 🔗 vínculo MP ↔ Compra
-    // });
 
     // 3️⃣ salva ID do MP
     await prisma.compra.update({
@@ -134,8 +120,9 @@ router.post("/", async (req, res) => {
  */
 router.post("/payment-webhook-mp", async (req, res) => {
   try {
-    const paymentId = req.body?.data?.id;
+    console.log("🔔 Webhook recebido:", req.body);
 
+    const paymentId = req.body?.data?.id;
     if (!paymentId) return res.sendStatus(200);
 
     const client = new MercadoPagoConfig({
@@ -143,31 +130,30 @@ router.post("/payment-webhook-mp", async (req, res) => {
     });
 
     const payment = new Payment(client);
-
     const mpPayment = await payment.get({ id: paymentId });
 
-    const compraId = mpPayment.external_reference;
+    console.log("💳 Status MP:", mpPayment.status);
 
+    const compraId = mpPayment.external_reference;
     if (!compraId) return res.sendStatus(200);
 
     if (mpPayment.status === "approved") {
-      const resultado = await prisma.compra.update({
+      await prisma.compra.update({
         where: { id: compraId },
         data: { status: "paid" },
       });
-      console.log(resultado);
     }
 
     if (mpPayment.status === "expired") {
-      const resultado = await prisma.compra.update({
+      await prisma.compra.update({
         where: { id: compraId },
         data: { status: "expired" },
       });
-      console.log(resultado);
     }
+
     return res.sendStatus(200);
   } catch (error) {
-    console.error("Erro webhook:", error);
+    console.error("❌ Erro webhook:", error);
     return res.sendStatus(500);
   }
 });
