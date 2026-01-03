@@ -157,5 +157,31 @@ router.post("/payment-webhook-mp", async (req, res) => {
     return res.sendStatus(500);
   }
 });
+router.get("/consultar-compra/:id", async (req, res) => {
+  const { id } = req.params;
+
+  if (!id) {
+    return res.status(400).json({ message: "Sem id da compra!" });
+  }
+
+  try {
+    const compra = await prisma.compra.findUnique({
+      where: { id },
+    });
+
+    if (!compra) {
+      return res.status(404).json({ message: "Compra não encontrada" });
+    }
+
+    if (compra.status === "paid") {
+      return res.status(200).json({ paid: true });
+    }
+
+    return res.status(200).json({ paid: false });
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({ message: "Erro de servidor" });
+  }
+});
 
 export default router;
