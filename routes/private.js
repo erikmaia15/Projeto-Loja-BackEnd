@@ -9,19 +9,19 @@ app.use("/categoriasPrivate", categoria);
 
 app.get("/listar-usuarios", async (req, res) => {
   try {
-    let page = parseInt(req.params.page) || 1; // página começa em 1
-    let size = parseInt(req.params.size) || 10;
+    console.log(req.query)
+    const page = Number(req.query.page) || 0; // começa em 0
+    const size = Number(req.query.size) || 10;
 
-    const skip = (page - 1) * size;
+    const skip = page * size;
 
-    // busca os usuários paginados
     const users = await prisma.user.findMany({
       include: { compras: true },
-      skip: skip,
+      skip,
       take: size,
+      orderBy:{nome:"asc"} // opcional mas recomendado
     });
 
-    // pega o total de usuários do banco
     const totalUsers = await prisma.user.count();
     const totalPages = Math.ceil(totalUsers / size);
 
@@ -36,10 +36,13 @@ app.get("/listar-usuarios", async (req, res) => {
       },
     });
   } catch (error) {
-    console.log(error);
-    res.status(500).json({ message: "erro no servidor, tente novamente" });
+    console.error(error);
+    res.status(500).json({
+      message: "Erro no servidor, tente novamente",
+    });
   }
 });
+
 app.put("/atualizar-usuario", async (req, res) => {
   try {
     const inforUser = req.body;
