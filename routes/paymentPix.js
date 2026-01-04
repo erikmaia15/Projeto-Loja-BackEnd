@@ -20,13 +20,12 @@ router.post("/", async (req, res) => {
       return res.status(401).json({ message: "Faça login para prosseguir!" });
     }
 
-    const user = await tokenDecodificar.decodedToken(req.headers.authorization);
-
-    const { compras } = req.body;
+    const { compras, email } = req.body;
 
     if (!compras || compras.length === 0) {
       return res.status(400).json({ message: "Carrinho vazio" });
     }
+    var user = await tokenDecodificar.decodedToken(req.headers.authorization);
 
     // 🔢 calcula total em centavos
     let totalCentavos = 0;
@@ -64,9 +63,37 @@ router.post("/", async (req, res) => {
         },
       },
     });
-    console.log(compra);
+    if (compra) {
+      await prisma.$transaction(async (tx) => {
+        for (const item of compras) {
+          const produto = await tx.produto.findUnique({
+            where: { id: item.produto.id },
+          });
 
-    // 2️⃣ cria pagamento PIX
+          const estoqueDisponivel =
+            produto.QtdEstoque - produto.QtdEstoqueReservado;
+
+          if (estoqueDisponivel < item.quantidadeComprado) {
+            res.status(400).json({
+              message: "Estoque insuficiente para quantidade comprada!",
+            });
+            throw new Error(
+              `Estoque insuficiente para ${produto.tituloProduto}`
+            );
+          }
+
+          const produtoResult = await tx.produto.update({
+            where: { id: item.produto.id },
+            data: {
+              QtdEstoqueReservado: {
+                increment: item.quantidadeComprado,
+              },
+            },
+          });
+          console.log(produtoResult);
+        }
+      });
+    }
     const client = new MercadoPagoConfig({
       accessToken: process.env.PAYMENT_TOKEN_ACESS_PRODUCT,
     });
@@ -74,16 +101,23 @@ router.post("/", async (req, res) => {
     const payment = new Payment(client);
     let valorFinal = parseFloat(totalCentavos / 100);
     const descricao = compras[0].produto.descricao;
+    const emailFinal =
+      email && email.trim() !== ""
+        ? email
+        : user?.email && user.email.trim() !== ""
+        ? user.email
+        : "erik.maia15oliveira@gmail.com";
     const pagamento = await payment.create({
       body: {
         transaction_amount: valorFinal,
         description: descricao.toString(),
         payment_method_id: "pix",
         payer: {
-          email: user.email || "erik.maia15oliveira@gmail.com",
+          email: emailFinal,
         },
         external_reference: compra.id, // 🔥 ESSENCIAL
         notification_url: `${process.env.URL_BACKEND}/pagamento-pix/payment-webhook-mp`,
+        // notification_url: `https://eb778bfe8289.ngrok-free.app/pagamento-pix/payment-webhook-mp`,
       },
       requestOptions: { idempotencyKey: compra.id },
     });
@@ -120,8 +154,6 @@ router.post("/", async (req, res) => {
  */
 router.post("/payment-webhook-mp", async (req, res) => {
   try {
-    console.log("🔔 Webhook recebido:", req.body);
-
     const paymentId = req.body?.data?.id;
     if (!paymentId) return res.sendStatus(200);
 
@@ -132,24 +164,65 @@ router.post("/payment-webhook-mp", async (req, res) => {
     const payment = new Payment(client);
     const mpPayment = await payment.get({ id: paymentId });
 
-    console.log("💳 Status MP:", mpPayment.status);
-
     const compraId = mpPayment.external_reference;
     if (!compraId) return res.sendStatus(200);
 
-    if (mpPayment.status === "approved") {
-      await prisma.compra.update({
-        where: { id: compraId },
-        data: { status: "paid" },
-      });
+    // 🔒 Busca compra atual
+    const compraAtual = await prisma.compra.findUnique({
+      where: { id: compraId },
+      include: { itens: true },
+    });
+
+    // 🛑 Idempotência
+    if (!compraAtual || compraAtual.status !== "pending") {
+      return res.sendStatus(200);
     }
 
-    if (mpPayment.status === "expired") {
-      await prisma.compra.update({
-        where: { id: compraId },
-        data: { status: "expired" },
-      });
-    }
+    // 🔁 TRANSACTION
+    await prisma.$transaction(async (tx) => {
+      if (mpPayment.status === "approved") {
+        await tx.compra.update({
+          where: { id: compraId },
+          data: { status: "paid" },
+        });
+
+        await Promise.all(
+          compraAtual.itens.map((item) =>
+            tx.produto.update({
+              where: { id: item.produtoId },
+              data: {
+                QtdEstoque: {
+                  decrement: item.quantidade,
+                },
+                QtdEstoqueReservado: {
+                  decrement: item.quantidade,
+                },
+              },
+            })
+          )
+        );
+      }
+
+      if (mpPayment.status === "expired") {
+        await tx.compra.update({
+          where: { id: compraId },
+          data: { status: "EXPIRED" },
+        });
+
+        await Promise.all(
+          compraAtual.itens.map((item) =>
+            tx.produto.update({
+              where: { id: item.produtoId },
+              data: {
+                QtdEstoqueReservado: {
+                  decrement: item.quantidade,
+                },
+              },
+            })
+          )
+        );
+      }
+    });
 
     return res.sendStatus(200);
   } catch (error) {
@@ -157,6 +230,7 @@ router.post("/payment-webhook-mp", async (req, res) => {
     return res.sendStatus(500);
   }
 });
+
 router.get("/consultar-compra/:id", async (req, res) => {
   const { id } = req.params;
 

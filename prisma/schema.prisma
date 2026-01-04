@@ -26,6 +26,7 @@ model Produto {
   descricao     String
   precoCentavos Int
   QtdEstoque    Int
+  QtdEstoqueReservado Int  @default(0)
   imagem        String
   categoriaId   String     @db.ObjectId  // ✅ Voltar para obrigatório
   categoria     Categoria  @relation(fields: [categoriaId], references: [id])
