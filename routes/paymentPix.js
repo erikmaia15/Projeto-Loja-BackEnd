@@ -99,6 +99,8 @@ router.post("/", async (req, res) => {
     });
 
     const payment = new Payment(client);
+    const MINUTOS_EXPIRACAO_PIX = 5;
+    const expiresAt = new Date(Date.now() + MINUTOS_EXPIRACAO_PIX * 60 * 1000);
     let valorFinal = parseFloat(totalCentavos / 100);
     const descricao = compras[0].produto.descricao;
     const emailFinal =
@@ -112,12 +114,13 @@ router.post("/", async (req, res) => {
         transaction_amount: valorFinal,
         description: descricao.toString(),
         payment_method_id: "pix",
+        date_of_expiration: expiresAt.toISOString(),
         payer: {
           email: emailFinal,
         },
         external_reference: compra.id, // 🔥 ESSENCIAL
         notification_url: `${process.env.URL_BACKEND}/pagamento-pix/payment-webhook-mp`,
-        // notification_url: `https://eb778bfe8289.ngrok-free.app/pagamento-pix/payment-webhook-mp`,
+        // notification_url: `https://e133a55f6766.ngrok-free.app/pagamento-pix/payment-webhook-mp`,
       },
       requestOptions: { idempotencyKey: compra.id },
     });
@@ -129,16 +132,24 @@ router.post("/", async (req, res) => {
         mpIdCompra: pagamento.id.toString(),
       },
     });
-
+    const pixInformacoes = await prisma.pixInformacoes.create({
+      data: {
+        compraId: compra.id,
+        expiresAt: pagamento.date_of_expiration,
+        qrCode: pagamento.point_of_interaction.transaction_data.qr_code,
+        qrCodeBase64:
+          pagamento.point_of_interaction.transaction_data.qr_code_base64,
+        ticketUrl: pagamento.point_of_interaction.transaction_data.ticket_url,
+      },
+    });
     // 4️⃣ retorna QR Code
     return res.status(201).json({
-      compraId: compra.id,
+      idConsulta: pixInformacoes.id,
+      compraId: pixInformacoes.compraId,
       status: pagamento.status,
-      expiresAt: pagamento.date_of_expiration,
-      qrCode: pagamento.point_of_interaction.transaction_data.qr_code,
-      qrCodeBase64:
-        pagamento.point_of_interaction.transaction_data.qr_code_base64,
-      ticketUrl: pagamento.point_of_interaction.transaction_data.ticket_url,
+      expiresAt: pixInformacoes.expiresAt,
+      qrCode: pixInformacoes.qrCode,
+      qrCodeBase64: pixInformacoes.qrCodeBase64,
     });
   } catch (error) {
     console.log(error);
@@ -228,6 +239,26 @@ router.post("/payment-webhook-mp", async (req, res) => {
   } catch (error) {
     console.error("❌ Erro webhook:", error);
     return res.sendStatus(500);
+  }
+});
+
+router.get("/buscarQrCode/:idConsulta", async (req, res) => {
+  const { idConsulta } = req.params;
+  if (!idConsulta) {
+    res.status(400).json({ message: "Sem id para consultar!" });
+  }
+  try {
+    const response = await prisma.pixInformacoes.findUnique({
+      where: { id: idConsulta },
+    });
+    if (response) {
+      res
+        .status(200)
+        .json({ message: "Qrcode buscado com sucesso!", response });
+    }
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ message: "Erro no servidor!" });
   }
 });
 

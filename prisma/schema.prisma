@@ -58,6 +58,14 @@ model CompraItem {
   quantidade    Int
   subtotal      Int
 }
+model PixInformacoes{
+   id           String   @id @default(auto()) @map("_id") @db.ObjectId
+   compraId      String   
+   expiresAt    DateTime
+   qrCode       String
+   qrCodeBase64 String
+   ticketUrl String
+}
 
 model Categoria {
   id        String    @id @default(auto()) @map("_id") @db.ObjectId
